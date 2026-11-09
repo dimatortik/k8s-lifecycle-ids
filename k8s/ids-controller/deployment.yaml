@@ -1,0 +1,92 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ids-system
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ids-controller
+  namespace: ids-system
+---
+# Read Pods; create Events (ThresholdRaised / ThresholdCleared). Both event API
+# groups are granted because controller-runtime may use either.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ids-controller
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+  - apiGroups: ["events.k8s.io"]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ids-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ids-controller
+subjects:
+  - kind: ServiceAccount
+    name: ids-controller
+    namespace: ids-system
+---
+# Metrics endpoint for the ServiceMonitor in k8s/monitoring/.
+apiVersion: v1
+kind: Service
+metadata:
+  name: ids-controller-metrics
+  namespace: ids-system
+  labels:
+    app: ids-controller
+spec:
+  selector:
+    app: ids-controller
+  ports:
+    - name: http-metrics
+      port: 9090
+      targetPort: 9090
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ids-controller
+  namespace: ids-system
+  labels:
+    app: ids-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ids-controller
+  template:
+    metadata:
+      labels:
+        app: ids-controller
+    spec:
+      serviceAccountName: ids-controller
+      containers:
+        - name: manager
+          # Replaced by deploy_workload.sh. Campaign image tag: v2-events-20260525-1746.
+          image: ids-controller:phase2
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--ml-service-url=http://ml-service.ids-system.svc.cluster.local:8080"
+            - "--pod-selector=ids-research.io/protected=true"
+            - "--high-threshold=-0.95"
+            - "--warmup-ttl=60s"
+          ports:
+            - name: metrics
+              containerPort: 9090
+          resources:
+            requests: { cpu: 50m,  memory: 64Mi }
+            limits:   { cpu: 200m, memory: 256Mi }

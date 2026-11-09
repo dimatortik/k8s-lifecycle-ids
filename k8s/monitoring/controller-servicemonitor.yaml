@@ -1,0 +1,24 @@
+# Scrapes the controller's :9090 /metrics (go_*, controller_runtime_*, ids_controller_*).
+# kube-prometheus-stack is installed with serviceMonitorSelectorNilUsesHelmValues=false,
+# so no extra Prometheus configuration is needed.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ids-controller
+  namespace: ids-system
+  labels:
+    release: kps
+    app: ids-controller
+spec:
+  selector:
+    matchLabels:
+      app: ids-controller
+  namespaceSelector:
+    matchNames:
+      - ids-system
+  endpoints:
+    - port: http-metrics      # matches Service.spec.ports[].name in ids-controller/deployment.yaml
+      path: /metrics
+      interval: 5s
+      scrapeTimeout: 4s       # must be < interval; 4 s gives headroom
+      honorLabels: false

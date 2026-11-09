@@ -1,0 +1,24 @@
+# Scrapes Tracee's :3366 /metrics on every node (DaemonSet, no Service, hence a
+# PodMonitor). resource_profiler.py reads tracee_ebpf_lostevents_total (no
+# underscore between "lost" and "events") and tracee_ebpf_events_total.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: tracee
+  namespace: tracee
+  labels:
+    release: kps
+    app: tracee
+spec:
+  selector:
+    matchLabels:
+      app: tracee
+  namespaceSelector:
+    matchNames:
+      - tracee
+  podMetricsEndpoints:
+    - port: metrics               # matches DaemonSet.spec.template.spec.containers[0].ports[].name
+      path: /metrics
+      interval: 5s
+      scrapeTimeout: 4s
+      honorLabels: false

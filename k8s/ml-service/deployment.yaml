@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ml-service
+  namespace: ids-system
+  labels:
+    app: ml-service
+spec:
+  selector:
+    app: ml-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ml-service
+  namespace: ids-system
+  labels:
+    app: ml-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ml-service
+  template:
+    metadata:
+      labels:
+        app: ml-service
+    spec:
+      containers:
+        - name: ml-service
+          # Replaced by deploy_workload.sh. Campaign image tag: phase2-r1.
+          image: ids-ml-service:phase2
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          # Room for the 9 IsolationForests kept in memory.
+          resources:
+            requests: { cpu: 500m, memory: 512Mi }
+            limits:   { cpu: 1,    memory: 1Gi }

