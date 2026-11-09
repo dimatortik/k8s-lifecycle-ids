@@ -1,0 +1,25 @@
+{
+  "purpose": "registry-fallback-for-unregistered-OB-services",
+  "workload": "online-boutique-steady",
+  "training_profile": "steady",
+  "n_rows_total": 1542,
+  "n_train": 771,
+  "n_holdout": 771,
+  "held_out_fpr": 0.05317769130998703,
+  "offset_": -0.641169513889783,
+  "services_pooled": [
+    "adservice",
+    "cartservice",
+    "checkoutservice",
+    "currencyservice",
+    "emailservice",
+    "frontend",
+    "paymentservice",
+    "productcatalogservice",
+    "recommendationservice",
+    "shippingservice"
+  ],
+  "trained_at": "2026-05-16T16:28:19.602070+00:00",
+  "git_commit": "b0d5383",
+  "schema_version": "2026-05-14-ablation"
+}
