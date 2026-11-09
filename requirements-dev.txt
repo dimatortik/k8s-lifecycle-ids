@@ -1,0 +1,5 @@
+# Tests only (pytest for both suites, httpx for FastAPI's TestClient).
+-r requirements.txt
+-r ml-service/requirements.txt
+pytest==8.4.2
+httpx==0.28.1

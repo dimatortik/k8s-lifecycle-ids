@@ -1,0 +1,52 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - name: statistics library tests
+        run: python -m pytest -q scripts/utils/test_calculate_statistics.py
+      - name: ml-service tests (API smoke tests skip without models)
+        run: cd ml-service && python -m pytest -q app/
+
+  go:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: controller
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: controller/go.mod
+          cache-dependency-path: controller/go.sum
+      - run: test -z "$(gofmt -l .)"
+      - run: go vet ./...
+      - run: go test -race ./...
+      - run: go build ./...
+
+  reproduce:
+    # Downloads the data release; run manually from the Actions tab.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - run: GITHUB_REPO=${{ github.repository }} make data
+      - run: make stats
+      - run: make replay
+      - name: ml-service API tests with the published models
+        run: cd ml-service && IDS_MODELS_DIR=../models python -m pytest -q app/
