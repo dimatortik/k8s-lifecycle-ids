@@ -1,0 +1,9 @@
+# Pinned after the campaigns to versions verified with the published models
+# (the image used in May 2026 was built without pins).
+fastapi==0.136.1
+uvicorn==0.44.0
+pydantic==2.12.5
+scikit-learn==1.7.2
+numpy==2.2.6
+pandas==2.3.2
+joblib==1.5.2
