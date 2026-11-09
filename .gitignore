@@ -1,0 +1,20 @@
+# Data release (scripts/fetch_data.sh)
+/experiments/results/
+/models/*
+!/models/baseline.provenance.json
+/.cache/
+/build/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Go
+/controller/bin/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
